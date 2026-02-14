@@ -6,420 +6,426 @@ import time
 import threading
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple
 import json
 import logging
 from datetime import datetime
 import signal
-import sys
 import argparse
+
+
+# ================================
+# Statistics Class
+# ================================
 
 @dataclass
 class StreamStats:
-    """Statistics for streaming performance monitoring"""
     fps_values: deque = field(default_factory=lambda: deque(maxlen=100))
     latency_values: deque = field(default_factory=lambda: deque(maxlen=100))
+
     packet_loss: int = 0
     total_packets: int = 0
     last_frame_id: int = -1
+
     start_time: float = field(default_factory=time.time)
-    
-    def update_fps(self, fps: float):
-        self.fps_values.append(fps)
-    
-    def update_latency(self, latency: float):
-        self.latency_values.append(latency)
-    
-    def check_packet_loss(self, frame_id: int):
-        self.total_packets += 1
+
+    def update_fps(self, fps):
+        if fps > 0:
+            self.fps_values.append(fps)
+
+    def update_latency(self, latency):
+        if latency >= 0:
+            self.latency_values.append(latency)
+
+    def check_packet_loss(self, frame_id):
+
         if self.last_frame_id != -1 and frame_id > self.last_frame_id + 1:
             self.packet_loss += frame_id - self.last_frame_id - 1
+
         self.last_frame_id = frame_id
-    
-    def get_avg_fps(self) -> float:
+        self.total_packets += 1
+
+    def get_avg_fps(self):
         return np.mean(self.fps_values) if self.fps_values else 0
-    
-    def get_avg_latency(self) -> float:
+
+    def get_avg_latency(self):
         return np.mean(self.latency_values) if self.latency_values else 0
-    
-    def get_packet_loss_rate(self) -> float:
+
+    def get_packet_loss_rate(self):
+
         if self.total_packets == 0:
             return 0
+
         return (self.packet_loss / self.total_packets) * 100
-    
-    def get_uptime(self) -> float:
+
+    def get_uptime(self):
         return time.time() - self.start_time
 
+
+# ================================
+# UDP Client
+# ================================
+
 class UDPStreamClient:
-    def __init__(self, ip: str = "0.0.0.0", port: int = 5005, 
-                 max_packet_size: int = 65507, 
-                 buffer_size: int = 10,
-                 enable_recording: bool = False,
-                 log_file: Optional[str] = None):
-        """
-        Enhanced UDP Stream Client
-        
-        Args:
-            ip: IP address to bind to
-            port: UDP port to listen on
-            max_packet_size: Maximum packet size
-            buffer_size: Size of frame buffer for smooth playback
-            enable_recording: Enable video recording
-            log_file: Path to log file
-        """
+
+    def __init__(
+        self,
+        ip="0.0.0.0",
+        port=5005,
+        buffer_size=30,
+        max_packet_size=65507,
+        enable_recording=False,
+        log_file=None
+    ):
+
         self.ip = ip
         self.port = port
-        self.max_packet_size = max_packet_size
         self.buffer_size = buffer_size
+        self.max_packet_size = max_packet_size
         self.enable_recording = enable_recording
+
         self.running = True
-        
-        # Setup logging
+
         self.setup_logging(log_file)
-        
-        # Initialize socket
+
+        # Socket
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.sock.bind((self.ip, self.port))
-        self.sock.settimeout(1.0)  # 1 second timeout
-        
-        # Statistics
-        self.stats = StreamStats()
-        
-        # Frame buffer for smooth playback
+        self.sock.bind((ip, port))
+        self.sock.settimeout(1.0)
+
+        self.logger.info(f"UDP Client initialized on {ip}:{port}")
+
+        # Frame buffer
         self.frame_buffer = deque(maxlen=buffer_size)
-        self.buffer_lock = threading.Lock()
-        
-        # Video writer for recording
+        self.lock = threading.Lock()
+
+        # Stats
+        self.stats = StreamStats()
+
+        # Timing
+        self.prev_time = None
+
+        # Video writer
         self.video_writer = None
-        
-        # Performance monitoring
-        self.prev_time = time.time()
+
         self.frame_count = 0
-        
-        # Callback functions
-        self.frame_callbacks = []
-        
-        self.logger.info(f"UDP Stream Client initialized on {self.ip}:{self.port}")
-    
-    def setup_logging(self, log_file: Optional[str]):
-        """Setup logging configuration"""
-        self.logger = logging.getLogger('UDPClient')
-        self.logger.setLevel(logging.INFO)
-        
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        
-        # Console handler
-        ch = logging.StreamHandler()
-        ch.setFormatter(formatter)
-        self.logger.addHandler(ch)
-        
-        # File handler if specified
-        if log_file:
-            fh = logging.FileHandler(log_file)
-            fh.setFormatter(formatter)
-            self.logger.addHandler(fh)
-    
-    def add_frame_callback(self, callback):
-        """Add callback function for frame processing"""
-        self.frame_callbacks.append(callback)
-    
-    def process_frame(self, frame: np.ndarray, frame_id: int, timestamp: float) -> np.ndarray:
-        """Process frame with all callbacks"""
-        for callback in self.frame_callbacks:
-            result = callback(frame, frame_id, timestamp)
-            if result is not None:
-                frame = result
-        return frame
-    
-    def init_video_writer(self, frame: np.ndarray):
-        """Initialize video writer for recording"""
-        if self.enable_recording and self.video_writer is None:
-            height, width = frame.shape[:2]
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"recording_{timestamp}.mp4"
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            self.video_writer = cv2.VideoWriter(filename, fourcc, 30.0, (width, height))
-            self.logger.info(f"Recording to {filename}")
-    
-    def receive_frame(self) -> Optional[Tuple[np.ndarray, int, float]]:
-        """Receive and decode a single frame"""
+
+
+    # ================================
+    # Logging
+    # ================================
+
+    def setup_logging(self, log_file):
+
+        self.logger = logging.getLogger("UDPClient")
+
+        if not self.logger.handlers:
+
+            self.logger.setLevel(logging.INFO)
+
+            formatter = logging.Formatter(
+                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+            )
+
+            ch = logging.StreamHandler()
+            ch.setFormatter(formatter)
+            self.logger.addHandler(ch)
+
+            if log_file:
+                fh = logging.FileHandler(log_file)
+                fh.setFormatter(formatter)
+                self.logger.addHandler(fh)
+
+
+    # ================================
+    # Receive Frame
+    # ================================
+
+    def receive_frame(self):
+
         try:
-            packet, addr = self.sock.recvfrom(self.max_packet_size)
-            
-            # Parse header
+
+            packet, _ = self.sock.recvfrom(self.max_packet_size)
+
             header_size = struct.calcsize("!IdI")
-            frame_id, timestamp, size = struct.unpack("!IdI", packet[:header_size])
-            
-            # Extract frame data
-            data = packet[header_size:]
-            frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
-            
-            if frame is None:
-                self.logger.warning(f"Failed to decode frame {frame_id}")
+
+            if len(packet) < header_size:
                 return None
-            
+
+            frame_id, timestamp, size = struct.unpack(
+                "!IdI", packet[:header_size]
+            )
+
+            data = packet[header_size:]
+
+            if len(data) != size:
+                return None
+
+            frame = cv2.imdecode(
+                np.frombuffer(data, dtype=np.uint8),
+                cv2.IMREAD_COLOR
+            )
+
+            if frame is None:
+                return None
+
             return frame, frame_id, timestamp
-            
+
         except socket.timeout:
             return None
-        except Exception as e:
-            self.logger.error(f"Error receiving frame: {e}")
+
+        except OSError:
             return None
-    
-    def display_frame(self, frame: np.ndarray, frame_id: int, latency: float, fps: float):
-        """Display frame with enhanced information overlay"""
+
+        except Exception as e:
+            self.logger.error(f"Receive error: {e}")
+            return None
+
+
+    # ================================
+    # Buffer Worker Thread
+    # ================================
+
+    def buffer_worker(self):
+
+        while self.running:
+
+            result = self.receive_frame()
+
+            if result:
+
+                with self.lock:
+                    self.frame_buffer.append(result)
+
+
+    # ================================
+    # FPS Calculation (FIXED)
+    # ================================
+
+    def calculate_fps(self):
+
+        now = time.time()
+
+        if self.prev_time is None:
+            self.prev_time = now
+            return 0
+
+        delta = now - self.prev_time
+
+        self.prev_time = now
+
+        if delta <= 0:
+            return 0
+
+        return 1.0 / delta
+
+
+    # ================================
+    # Display Frame
+    # ================================
+
+    def display_frame(self, frame, frame_id, latency, fps):
+
         display = frame.copy()
-        
-        # Add information overlay
-        height, width = display.shape[:2]
-        
-        # Semi-transparent overlay for text background
+
         overlay = display.copy()
-        cv2.rectangle(overlay, (10, 10), (350, 140), (0, 0, 0), -1)
-        display = cv2.addWeighted(overlay, 0.3, display, 0.7, 0)
-        
-        # Display information
-        info_lines = [
-            f"Frame ID: {frame_id}",
+
+        cv2.rectangle(overlay, (10, 10), (360, 160), (0, 0, 0), -1)
+
+        display = cv2.addWeighted(overlay, 0.4, display, 0.6, 0)
+
+        lines = [
+
+            f"Frame: {frame_id}",
             f"FPS: {fps:.1f}",
             f"Latency: {latency*1000:.1f} ms",
             f"Packet Loss: {self.stats.get_packet_loss_rate():.1f}%",
-            f"Buffer: {len(self.frame_buffer)}/{self.buffer_size}",
+            f"Buffer: {len(self.frame_buffer)}",
             f"Uptime: {self.stats.get_uptime():.1f}s"
         ]
-        
-        for i, line in enumerate(info_lines):
-            cv2.putText(display, line, (20, 40 + i*25), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
-        
-        # Add latency indicator
-        latency_ms = latency * 1000
-        if latency_ms < 50:
-            color = (0, 255, 0)  # Green for good
-        elif latency_ms < 150:
-            color = (0, 255, 255)  # Yellow for moderate
-        else:
-            color = (0, 0, 255)  # Red for poor
-        
-        cv2.circle(display, (width - 50, 50), 10, color, -1)
-        
-        # Add timestamp
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
-        cv2.putText(display, timestamp, (width - 250, height - 20),
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
-        
+
+        y = 35
+
+        for line in lines:
+
+            cv2.putText(
+                display,
+                line,
+                (20, y),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2
+            )
+
+            y += 22
+
         return display
-    
-    def buffer_worker(self):
-        """Worker thread to receive frames and fill buffer"""
-        while self.running:
-            result = self.receive_frame()
-            if result:
-                frame, frame_id, timestamp = result
-                with self.buffer_lock:
-                    self.frame_buffer.append((frame, frame_id, timestamp))
-    
+
+
+    # ================================
+    # Video Writer
+    # ================================
+
+    def init_writer(self, frame):
+
+        if self.video_writer is None and self.enable_recording:
+
+            h, w = frame.shape[:2]
+
+            filename = f"recording_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+
+            self.video_writer = cv2.VideoWriter(
+                filename,
+                fourcc,
+                30,
+                (w, h)
+            )
+
+            self.logger.info(f"Recording started: {filename}")
+
+
+    # ================================
+    # Main Loop
+    # ================================
+
     def run(self):
-        """Main client loop"""
-        self.logger.info(f"Starting UDP client on {self.ip}:{self.port}")
-        
-        # Start buffer thread
-        buffer_thread = threading.Thread(target=self.buffer_worker, daemon=True)
+
+        buffer_thread = threading.Thread(
+            target=self.buffer_worker,
+            daemon=True
+        )
+
         buffer_thread.start()
-        
-        # Setup signal handler for graceful shutdown
-        signal.signal(signal.SIGINT, self.signal_handler)
-        
-        # Performance monitoring window
-        cv2.namedWindow("UDP Client Stream", cv2.WINDOW_NORMAL)
-        
+
+        cv2.namedWindow("UDP Stream", cv2.WINDOW_NORMAL)
+
+        signal.signal(signal.SIGINT, self.stop)
+
+        self.logger.info("Client running...")
+
         try:
+
             while self.running:
-                # Get frame from buffer
-                with self.buffer_lock:
+
+                with self.lock:
+
                     if not self.frame_buffer:
-                        time.sleep(0.001)
                         continue
+
                     frame, frame_id, timestamp = self.frame_buffer.popleft()
-                
-                # Calculate latency
-                current_time = time.time()
-                latency = current_time - timestamp
-                
-                # Check for packet loss
-                self.stats.check_packet_loss(frame_id)
-                self.stats.update_latency(latency)
-                
-                # Calculate FPS
-                fps = 1 / (current_time - self.prev_time) if self.prev_time else 0
-                self.prev_time = current_time
+
+                now = time.time()
+
+                latency = now - timestamp
+
+                fps = self.calculate_fps()
+
                 self.stats.update_fps(fps)
+
+                self.stats.update_latency(latency)
+
+                self.stats.check_packet_loss(frame_id)
+
                 self.frame_count += 1
-                
-                # Initialize video writer if recording
-                if self.enable_recording and self.video_writer is None:
-                    self.init_video_writer(frame)
-                
-                # Process frame with callbacks
-                processed_frame = self.process_frame(frame, frame_id, timestamp)
-                
-                # Record frame if enabled
+
+                self.init_writer(frame)
+
                 if self.video_writer:
-                    self.video_writer.write(processed_frame)
-                
-                # Display frame
-                display_frame = self.display_frame(processed_frame, frame_id, latency, fps)
-                cv2.imshow("UDP Client Stream", display_frame)
-                
-                # Handle keyboard input
-                key = cv2.waitKey(1) & 0xFF
-                if key == 27:  # ESC
-                    self.logger.info("ESC pressed, shutting down...")
+                    self.video_writer.write(frame)
+
+                display = self.display_frame(frame, frame_id, latency, fps)
+
+                cv2.imshow("UDP Stream", display)
+
+                key = cv2.waitKey(1)
+
+                if key == 27:
                     break
-                elif key == ord('r'):  # Toggle recording
-                    self.enable_recording = not self.enable_recording
-                    if not self.enable_recording and self.video_writer:
-                        self.video_writer.release()
-                        self.video_writer = None
-                    self.logger.info(f"Recording {'enabled' if self.enable_recording else 'disabled'}")
-                elif key == ord('s'):  # Save statistics
-                    self.save_statistics()
-                elif key == ord('c'):  # Clear buffer
-                    with self.buffer_lock:
-                        self.frame_buffer.clear()
-                    self.logger.info("Buffer cleared")
-                
-        except Exception as e:
-            self.logger.error(f"Error in main loop: {e}")
+
         finally:
+
             self.cleanup()
-    
-    def signal_handler(self, signum, frame):
-        """Handle shutdown signals"""
-        self.logger.info("Shutdown signal received")
+
+
+    # ================================
+    # Shutdown
+    # ================================
+
+    def stop(self, *args):
+
+        self.logger.info("Stopping client...")
         self.running = False
-    
-    def save_statistics(self, filename: Optional[str] = None):
-        """Save statistics to JSON file"""
-        if filename is None:
-            filename = f"stats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        
-        stats_data = {
-            'avg_fps': self.stats.get_avg_fps(),
-            'avg_latency_ms': self.stats.get_avg_latency() * 1000,
-            'packet_loss_rate': self.stats.get_packet_loss_rate(),
-            'total_packets': self.stats.total_packets,
-            'packet_loss': self.stats.packet_loss,
-            'frame_count': self.frame_count,
-            'uptime': self.stats.get_uptime(),
-            'timestamp': datetime.now().isoformat()
-        }
-        
-        with open(filename, 'w') as f:
-            json.dump(stats_data, f, indent=2)
-        
-        self.logger.info(f"Statistics saved to {filename}")
-    
+
+
     def cleanup(self):
-        """Clean up resources"""
+
         self.running = False
+
+        try:
+            self.sock.close()
+        except:
+            pass
+
         if self.video_writer:
             self.video_writer.release()
-        self.sock.close()
+
         cv2.destroyAllWindows()
-        
-        # Save final statistics
-        self.save_statistics()
-        
-        self.logger.info("Cleanup completed")
-        self.logger.info(f"Average FPS: {self.stats.get_avg_fps():.2f}")
-        self.logger.info(f"Average Latency: {self.stats.get_avg_latency()*1000:.2f} ms")
-        self.logger.info(f"Packet Loss Rate: {self.stats.get_packet_loss_rate():.2f}%")
 
-# Example callback functions
-def draw_detection_overlay(frame, frame_id, timestamp):
-    """Example callback for drawing detections"""
-    # This could be your SORT tracking integration
-    return frame
+        self.save_stats()
 
-def log_frame_info(frame, frame_id, timestamp):
-    """Example callback for logging frame information"""
-    latency = time.time() - timestamp
-    print(f"Frame {frame_id}: Latency {latency*1000:.1f}ms")
-    return frame
+        self.logger.info("Cleanup done")
 
-def save_frame_callback(save_interval: int = 30):
-    """Factory function for frame saving callback"""
-    counter = 0
-    
-    def callback(frame, frame_id, timestamp):
-        nonlocal counter
-        counter += 1
-        if counter % save_interval == 0:
-            filename = f"frame_{frame_id}_{timestamp}.jpg"
-            cv2.imwrite(filename, frame)
-            print(f"Saved {filename}")
-        return frame
-    
-    return callback
 
-def create_network_monitor():
-    """Create a network monitoring callback"""
-    bandwidth = deque(maxlen=100)
-    
-    def callback(frame, frame_id, timestamp):
-        # Estimate bandwidth (rough approximation)
-        frame_size = frame.nbytes
-        bandwidth.append(frame_size)
-        
-        if len(bandwidth) > 1:
-            avg_size = np.mean(bandwidth)
-            cv2.putText(frame, f"BW: {avg_size/1024:.1f} KB/frame", 
-                       (20, 200), cv2.FONT_HERSHEY_SIMPLEX, 
-                       0.5, (255, 255, 0), 1)
-        return frame
-    
-    return callback
+    # ================================
+    # Save Stats
+    # ================================
+
+    def save_stats(self):
+
+        stats = {
+
+            "avg_fps": self.stats.get_avg_fps(),
+            "avg_latency_ms": self.stats.get_avg_latency()*1000,
+            "packet_loss_rate": self.stats.get_packet_loss_rate(),
+            "total_frames": self.frame_count,
+            "uptime": self.stats.get_uptime()
+        }
+
+        filename = f"stats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+
+        with open(filename, "w") as f:
+            json.dump(stats, f, indent=4)
+
+        self.logger.info(f"Stats saved: {filename}")
+
+
+# ================================
+# Main
+# ================================
 
 def main():
-    """Main function with argument parsing"""
-    parser = argparse.ArgumentParser(description='UDP Video Stream Client')
-    parser.add_argument('--ip', type=str, default='0.0.0.0',
-                       help='IP address to bind to')
-    parser.add_argument('--port', type=int, default=5005,
-                       help='UDP port to listen on')
-    parser.add_argument('--buffer', type=int, default=10,
-                       help='Frame buffer size')
-    parser.add_argument('--record', action='store_true',
-                       help='Enable video recording')
-    parser.add_argument('--log', type=str, default=None,
-                       help='Log file path')
-    parser.add_argument('--stats-interval', type=int, default=60,
-                       help='Statistics save interval in seconds')
-    
+
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("--ip", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=5005)
+    parser.add_argument("--buffer", type=int, default=30)
+    parser.add_argument("--record", action="store_true")
+
     args = parser.parse_args()
-    
-    # Create and configure client
+
     client = UDPStreamClient(
         ip=args.ip,
         port=args.port,
         buffer_size=args.buffer,
-        enable_recording=args.record,
-        log_file=args.log
+        enable_recording=args.record
     )
-    
-    # Add example callbacks
-    client.add_frame_callback(draw_detection_overlay)
-    client.add_frame_callback(create_network_monitor())
-    client.add_frame_callback(save_frame_callback(save_interval=100))
-    
-    # Start client
-    try:
-        client.run()
-    except KeyboardInterrupt:
-        print("\nShutting down...")
-    finally:
-        client.cleanup()
+
+    client.run()
+
 
 if __name__ == "__main__":
     main()
