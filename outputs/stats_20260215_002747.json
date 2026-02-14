@@ -1,0 +1,11 @@
+{
+  "avg_fps": 22.20249259973098,
+  "avg_inference_time_ms": 26.302306652069092,
+  "avg_detections": 1.0,
+  "avg_tracks": 1.0,
+  "total_frames": 990,
+  "total_unique_tracks": 1,
+  "uptime": 60.393633127212524,
+  "half_precision": true,
+  "timestamp": "2026-02-15 00:27:47"
+}

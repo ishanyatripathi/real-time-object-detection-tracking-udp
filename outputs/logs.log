@@ -1,0 +1,59 @@
+2026-02-15 00:26:46,579 - ObjectTracker - INFO - Using device: cuda
+2026-02-15 00:26:46,590 - ObjectTracker - INFO - Half precision enabled for faster inference
+2026-02-15 00:26:46,809 - ObjectTracker - INFO - ObjectTracker initialized
+2026-02-15 00:26:46,811 - ObjectTracker - INFO - Starting tracking from source: 0
+2026-02-15 00:26:46,812 - ObjectTracker - INFO - Running warmup for 10 frames...
+2026-02-15 00:26:48,342 - ObjectTracker - INFO - Warmup complete
+2026-02-15 00:26:49,729 - ObjectTracker - INFO - Video properties: 640x480, -1 frames
+2026-02-15 00:26:55,281 - ObjectTracker - INFO - Frame 100/? - FPS: 22.8, Tracks: 2
+2026-02-15 00:27:00,055 - ObjectTracker - INFO - Frame 200/? - FPS: 21.8, Tracks: 1
+2026-02-15 00:27:05,062 - ObjectTracker - INFO - Frame 300/? - FPS: 20.6, Tracks: 1
+2026-02-15 00:27:09,591 - ObjectTracker - INFO - Frame 400/? - FPS: 23.4, Tracks: 2
+2026-02-15 00:27:14,485 - ObjectTracker - INFO - Frame 500/? - FPS: 21.1, Tracks: 1
+2026-02-15 00:27:20,795 - ObjectTracker - INFO - Frame 600/? - FPS: 17.9, Tracks: 1
+2026-02-15 00:27:28,124 - ObjectTracker - INFO - Frame 700/? - FPS: 14.7, Tracks: 1
+2026-02-15 00:27:34,695 - ObjectTracker - INFO - Frame 800/? - FPS: 16.4, Tracks: 1
+2026-02-15 00:27:41,687 - ObjectTracker - INFO - Frame 900/? - FPS: 15.4, Tracks: 1
+2026-02-15 00:27:46,644 - ObjectTracker - INFO - ESC pressed, stopping...
+2026-02-15 00:27:47,202 - ObjectTracker - INFO - Statistics saved to outputs\stats_20260215_002747.json
+2026-02-15 00:27:47,207 - ObjectTracker - INFO - ==================================================
+2026-02-15 00:27:47,207 - ObjectTracker - INFO - TRACKING STATISTICS
+2026-02-15 00:27:47,207 - ObjectTracker - INFO - ==================================================
+2026-02-15 00:27:47,207 - ObjectTracker - INFO - Average FPS: 22.20
+2026-02-15 00:27:47,209 - ObjectTracker - INFO - Average Inference Time: 26.30ms
+2026-02-15 00:27:47,209 - ObjectTracker - INFO - Average Detections: 1.0
+2026-02-15 00:27:47,211 - ObjectTracker - INFO - Average Tracks: 1.0
+2026-02-15 00:27:47,211 - ObjectTracker - INFO - Total Frames: 990
+2026-02-15 00:27:47,211 - ObjectTracker - INFO - Total Unique Tracks: 1
+2026-02-15 00:27:47,211 - ObjectTracker - INFO - Uptime: 60.4s
+2026-02-15 00:27:47,211 - ObjectTracker - INFO - ==================================================
+2026-02-15 00:27:47,211 - ObjectTracker - INFO - Cleanup completed
+2026-02-15 00:28:47,719 - ObjectTracker - INFO - Using device: cuda
+2026-02-15 00:28:47,721 - ObjectTracker - INFO - Half precision enabled for faster inference
+2026-02-15 00:28:47,917 - ObjectTracker - INFO - ObjectTracker initialized
+2026-02-15 00:28:47,917 - ObjectTracker - INFO - Starting tracking from source: 0
+2026-02-15 00:28:47,917 - ObjectTracker - INFO - Running warmup for 10 frames...
+2026-02-15 00:28:49,285 - ObjectTracker - INFO - Warmup complete
+2026-02-15 00:28:50,875 - ObjectTracker - INFO - Video properties: 640x480, -1 frames
+2026-02-15 00:28:56,526 - ObjectTracker - INFO - Frame 100/? - FPS: 22.8, Tracks: 1
+2026-02-15 00:29:01,214 - ObjectTracker - INFO - Frame 200/? - FPS: 22.4, Tracks: 1
+2026-02-15 00:29:05,842 - ObjectTracker - INFO - Frame 300/? - FPS: 22.7, Tracks: 1
+2026-02-15 00:29:10,597 - ObjectTracker - INFO - Frame 400/? - FPS: 21.9, Tracks: 2
+2026-02-15 00:29:15,495 - ObjectTracker - INFO - Frame 500/? - FPS: 21.3, Tracks: 2
+2026-02-15 00:29:20,381 - ObjectTracker - INFO - Frame 600/? - FPS: 21.3, Tracks: 1
+2026-02-15 00:29:25,334 - ObjectTracker - INFO - Frame 700/? - FPS: 21.0, Tracks: 1
+2026-02-15 00:29:30,184 - ObjectTracker - INFO - Frame 800/? - FPS: 21.4, Tracks: 1
+2026-02-15 00:29:34,120 - ObjectTracker - INFO - ESC pressed, stopping...
+2026-02-15 00:29:34,607 - ObjectTracker - INFO - Statistics saved to outputs\stats_20260215_002934.json
+2026-02-15 00:29:34,609 - ObjectTracker - INFO - ==================================================
+2026-02-15 00:29:34,610 - ObjectTracker - INFO - TRACKING STATISTICS
+2026-02-15 00:29:34,612 - ObjectTracker - INFO - ==================================================
+2026-02-15 00:29:34,614 - ObjectTracker - INFO - Average FPS: 22.30
+2026-02-15 00:29:34,617 - ObjectTracker - INFO - Average Inference Time: 25.20ms
+2026-02-15 00:29:34,619 - ObjectTracker - INFO - Average Detections: 1.0
+2026-02-15 00:29:34,621 - ObjectTracker - INFO - Average Tracks: 1.0
+2026-02-15 00:29:34,621 - ObjectTracker - INFO - Total Frames: 883
+2026-02-15 00:29:34,623 - ObjectTracker - INFO - Total Unique Tracks: 1
+2026-02-15 00:29:34,623 - ObjectTracker - INFO - Uptime: 46.7s
+2026-02-15 00:29:34,628 - ObjectTracker - INFO - ==================================================
+2026-02-15 00:29:34,632 - ObjectTracker - INFO - Cleanup completed
